@@ -68,6 +68,9 @@ long count;                           // Current number of interrupts from encod
 long countIncrement;                  // Number of counts per user interval spec
 long loopCount;                       // Number of times count increment met
 int motorDirection;                   // Direction the robot is moving
+long currentCount;                    // Position at beginning of call to move()
+volatile boolean moving;              // Whether or not robot is currently moving. Declared as volatile so
+                                      // it doesn't get optimized out by compiler
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
@@ -94,7 +97,7 @@ void setup()
   attachInterrupt(2, countInt, CHANGE);
   
   // SD card Initialization
-  Serial.println("Initializing SD card..."); // throw error is fail ***
+  Serial.println("Initializing SD card..."); // throw error if fail ***
   if(SD.begin(SD_CS_P))
   {
      Serial.println("SD card initialized successfully.\n");
@@ -125,10 +128,12 @@ void setup()
 void loop()
 { 
   move();
+  resetMotor();
   delay(2000);
   changeDirection();
   
   move();
+  resetMotor();
   delay(2000);
   changeDirection();
   
@@ -149,7 +154,7 @@ void loop()
 void move ()
 {
   //save the current position
-  long currentCount = count;
+  currentCount = count;
 //  int motorSpeed = 0;
   
   // Set PWM with respect to direction
@@ -171,6 +176,12 @@ void move ()
 
     // Set normal speed
     analogWrite(MOTOR_EN_P, MOTOR_SPEED);
+    
+    // Robot is now moving
+    moving = true;
+    
+    // Wait until ISR stops robot
+    while(moving);
      
 //    if(motorSpeed + 30 > MAX_SPEED)
 //    {
@@ -190,9 +201,6 @@ void move ()
   //while ((count < currentCount + countIncrement - 5)){
   //  delay(1);
   //}
-  
-  
-  
   return;
 }
 
@@ -226,24 +234,46 @@ void changeDirection()
 }
 
 
+// Turns off motor and restores it to its original direction before the ISR braked it
+void resetMotor() {
+  
+  delay(100);
+  
+  // Turn off motor
+  analogWrite(MOTOR_EN_P, 0);
+  
+  // Restore direction before ISR braked
+  digitalWrite(MOTOR_A_P, !(digitalRead(MOTOR_A_P)));
+  
+}
+
 //ISR for the rotary encoder
 //Increments the counter variable by 1 every time it is triggered on both the rising
 //and falling edge of the signal. This translates into 16 interrupts per rotation of the 
 //disc. With a 1 5/8 diameter wheel, this equals 0.38" per interrupt
+//Brakes motor once desired distance was traveled
 void countInt(){
+  
   count++;
-  
-  // Service routine to stop the robot
-  if(count == countIncrement)
-  {
-    Serial.println("Braking");
-    analogWrite(MOTOR_EN_P, 0);
-  }
-  
   
   Serial.print("Count = ");
   Serial.println(count);  
   
+  // Service routine to stop the robot
+  if(count == currentCount + countIncrement)
+  {
+    Serial.println("Braking");
+    
+    // Toggle one motor pin to make both either 0 or 1
+    digitalWrite(MOTOR_A_P, !digitalRead(MOTOR_A_P));
+    
+    // Brake motor
+    analogWrite(MOTOR_EN_P, 255);
+    
+    // Robot is no longer moving
+    moving = false;
+    
+   }
 }
 
 
