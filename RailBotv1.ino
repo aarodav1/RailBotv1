@@ -11,6 +11,7 @@
  $LOG$
  *****************************************************************************
  $NOTES$
+ 1) Backwards and forwards are relative to user specified intial start
  *****************************************************************************
  $REFERENCES$
  *****************************************************************************/
@@ -56,21 +57,25 @@
 #define LASER_OFF_P = 8;   // Laser off (out) => pin8
 
 // Analong Components
-#define MOTOR_A_P 25      // PWM A (out) => pin25
-#define MOTOR_B_P 26      // PWM B (out) => pin26
-#define MOTOR_EN_P 13     // Motor enable => pin13
-#define MAX_SPEED 240     // Motor max PWM (count)
-#define MOTOR_SPEED 220   // Normal motor speed
+#define MOTOR_A_P 26         // PWM A (out) => pin25
+#define MOTOR_B_P 25         // PWM B (out) => pin26
+#define MOTOR_EN_P 13        // Motor enable => pin13
+#define MAX_SPEED 255        // Motor max PWM (count)
+#define MOTOR_SPEED 255      // Normal motor speed
+#define MOTOR_ADJ_SPEED 200  // Ajusting motor speed 
 
 /*-----( Global Variables )-----*/
 const uint64_t pipe = 0xF0F0F0F0D2LL; // Define the transmit pipe **LL IS LONGLONG**
 long count;                           // Current number of interrupts from encoder
+long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
 long loopCount;                       // Number of times count increment met
 int motorDirection;                   // Direction the robot is moving
-long currentCount;                    // Position at beginning of call to move()
 volatile boolean moving;              // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
+                                      
+int testCounter;                                      
+
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
@@ -81,44 +86,43 @@ RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
   Setup: Set up all required I/O and global variables
 */
 void setup()
-{  
-  
+{    
   // Laser initialization
   Serial.begin(115200);   // runs with 115200 baud
-  
   
   // Assign global variables
   count = 0;
   loopCount = 0;
-  countIncrement = 50;
+  countIncrement = 25;
   motorDirection = 1;
   
   // Set up rotary encoder interrupt
-  attachInterrupt(2, countInt, CHANGE);
+  attachInterrupt( 2, countInt, CHANGE );
   
   // SD card Initialization
   Serial.println("Initializing SD card..."); // throw error if fail ***
-  if(SD.begin(SD_CS_P))
+  if ( SD.begin(SD_CS_P) )
   {
      Serial.println("SD card initialized successfully.\n");
   }
   
   // Set up motor pin modes
-  pinMode(MOTOR_A_P, OUTPUT);
-  pinMode(MOTOR_B_P, OUTPUT);
-  pinMode(MOTOR_EN_P, OUTPUT);
+  pinMode( MOTOR_A_P, OUTPUT );
+  pinMode( MOTOR_B_P, OUTPUT );
+  pinMode( MOTOR_EN_P, OUTPUT );
 
   // Motor initialization
-  digitalWrite(MOTOR_A_P, HIGH);
-  digitalWrite(MOTOR_B_P, LOW);
-  analogWrite(MOTOR_EN_P, 0);
+  digitalWrite( MOTOR_A_P, HIGH );
+  digitalWrite( MOTOR_B_P, LOW );
+  analogWrite( MOTOR_EN_P, 0 );
   
   // RF Initialization
   printf_begin();
   radio.begin();
   Serial.println("RF Module information:");
   radio.printDetails();
-  
+
+  Serial.println("Setup - Setup compelte!");  
   
 }//--( end setup )---
 
@@ -127,112 +131,142 @@ void setup()
 */
 void loop()
 { 
-  move();
-  resetMotor();
-  delay(2000);
-  changeDirection();
   
-  move();
-  resetMotor();
+if(testCounter <3){
+  Serial.println("loop - Moving Forward...");
+  driveMotor();
+  //resetMotor();
+  Serial.println("loop - Increment traversed!");
   delay(2000);
-  changeDirection();
+}
+testCounter++;
+Serial.print("Test counter: ");
+Serial.println(testCounter);
+  //changeDirection();
+  //driveMotor();
+  //resetMotor();
+  //delay(2000);
+  //changeDirection();
   
 }//--( end main loop )---
 
 
 /*-----( USER FUNCTIONS )-----*/
 
-//This function moves the robot the distance represented by the value in
-//countIncrement. This variable will be set during the initialization
-//based on the increment distance configured by the user before starting the survey.
-//The idea of this function is to speed up to MAX_SPEED in a controlled fashion
-//instead of instantly going to MAX_SPEED. The motor speed will increase up to a 
-//max of MAX_SPEED until it has traversed half the required distance, and then will
-//begin to slow back down to a stop for the second half.
-
-//NOTE: play with delay values and while loop conditions once motor is functional
-void move ()
-{
-  //save the current position
+/*
+  Drive Motor: An algorithm to efficiently get the robot to the next position. This
+    function moves the robot the distance represented by the value in countIncrement.
+    This variable will be set during the initialization based on the increment distance
+    configured by the user before starting the survey. The idea of this function is to
+    set the speed to MOTOR_SPEED. The robot will move until the countIncrement is met.
+    At this point, it is checked if the robot has made it to the correct distance. If
+    There is any overshoot or undershoot, the robot will auto correct until it reaches
+    the correct location.
+*/
+void driveMotor ()
+{ 
+  // Declare/Initialize adjustment parameters
+  int temp_speed = MOTOR_SPEED;
+  int temp_direction = motorDirection;
+  
+  // Save the current position
   currentCount = count;
-//  int motorSpeed = 0;
+  int targetLocation = currentCount + countIncrement;
   
-  // Set PWM with respect to direction
-  /*if (motorDirection == 1)  // Move forward
-  {
-    digitalWrite(MOTOR_A_P, HIGH);
-    digitalWrite(MOTOR_B_P, LOW);
-  }
-  else if (motorDirection == -1)// Move backward
-  {
-    digitalWrite(MOTOR_A_P, LOW);
-    digitalWrite(MOTOR_B_P, HIGH);
-  }*/
+  // debug
+  Serial.print("driveMotor - Saving count: Current count = ");
+  Serial.println(currentCount);
   
-  // Set Motor Speed
-//  while (count < (currentCount + countIncrement - 20))
-//  {
-//speed up until half of the distance is traversed
-
+  // Drive the next location
+  do
+  {
+    // debug
+    Serial.print("driveMotor - Moving with speed: ");
+    Serial.println(temp_speed);
+      
     // Set normal speed
-    analogWrite(MOTOR_EN_P, MOTOR_SPEED);
+    analogWrite( MOTOR_EN_P, temp_speed );
     
     // Robot is now moving
     moving = true;
-    
-    // Wait until ISR stops robot
-    while(moving);
-     
-//    if(motorSpeed + 30 > MAX_SPEED)
-//    {
-//      motorSpeed = MAX_SPEED;
-//    }
-//    else
-//    {
-//      motorSpeed+=30;
-//    }
-     
-  //  delay(300);
-  //}
-  //Serial.println("Slowing speed.");
-  //motorSpeed = 200;
-  //analogWrite(MOTOR_EN_P, motorSpeed);
-   
-  //while ((count < currentCount + countIncrement - 5)){
-  //  delay(1);
-  //}
+        
+    // Begin counting traversal
+    while( moving ); // Wait until ISR stops robot
+    delay(1000);     // Slowdown time
+      
+    Serial.println("driveMotor - Done Moving.");
+      
+    // After robot has stopped, check if not at correct location
+    if( count != targetLocation )
+    {
+      //debug
+      Serial.println("driveMotor - Not at the target location");
+        
+      // Set adjustment speed (slower then normal speed)
+      temp_speed = MOTOR_ADJ_SPEED;
+        
+      // Check if overshoot, then must change direction 
+      if(count > targetLocation & temp_direction == motorDirection)
+      {
+        Serial.println("driveMotor - ...overshot it");
+        changeDirection();
+      }
+      // Overshot while trying to adjust
+      else if (count < targetLocation & temp_direction == -motorDirection)
+      {
+        Serial.println("driveMotor - ...overshot it");
+        changeDirection();  
+      }
+    }
+    // Found the correct location
+    else
+    {
+     Serial.println("Found the location!!");
+     // Verify direction is still forward
+     if(motorDirection != temp_direction)
+     {
+       Serial.println("Changing direction after adjusting in opposite direction");
+       changeDirection();
+     }
+     break; 
+    }
+      
+  } while(true);
+  
   return;
 }
 
+
+
 /*
-  Change Direction:
+  Change Direction: Reconfigures the motor to drive the opposite direction
 */
 void changeDirection()
 {
-  Serial.print("Direction = ");
-  Serial.println(motorDirection);
-  analogWrite(MOTOR_EN_P, 0);
-  delay(50);
+  Serial.println("changeDirection - Changing Direction...");
+  analogWrite( MOTOR_EN_P, 0 );
+  
   // Already moving forward, so..
-  if(motorDirection == 1)
+  if ( motorDirection == 1 )
   {
     // Set to move backwards
     motorDirection = -1;
-    Serial.print("motor direction switched = ");
+    digitalWrite( MOTOR_A_P, LOW );
+    digitalWrite( MOTOR_B_P, HIGH );
+    Serial.print("changeDirection - Motor direction switched = ");
     Serial.println(motorDirection);
-    digitalWrite(MOTOR_A_P, LOW);
-    digitalWrite(MOTOR_B_P, HIGH);
   }
   // Already moving backward, so...
-  else if(motorDirection == -1)
+  else if ( motorDirection == -1 )
   {
-        // Set to move backwards
+    // Set to move forwards
     motorDirection = 1;
-    digitalWrite(MOTOR_A_P, HIGH);
-    digitalWrite(MOTOR_B_P, LOW);
+    digitalWrite( MOTOR_A_P, HIGH );
+    digitalWrite( MOTOR_B_P, LOW );
+    Serial.print("changeDirection - Motor direction switched = ");
+    Serial.println(motorDirection);
   }
 }
-
 
 // Turns off motor and restores it to its original direction before the ISR braked it
 void resetMotor() {
@@ -240,10 +274,10 @@ void resetMotor() {
   delay(100);
   
   // Turn off motor
-  analogWrite(MOTOR_EN_P, 0);
+  analogWrite( MOTOR_EN_P, 0 );
   
   // Restore direction before ISR braked
-  digitalWrite(MOTOR_A_P, !(digitalRead(MOTOR_A_P)));
+  digitalWrite( MOTOR_A_P, !(digitalRead(MOTOR_A_P)) );
   
 }
 
@@ -253,26 +287,32 @@ void resetMotor() {
 //disc. With a 1 5/8 diameter wheel, this equals 0.38" per interrupt
 //Brakes motor once desired distance was traveled
 void countInt(){
+
+  // Moving forward, increment counter
+  if ( motorDirection == 1 )
+  {
+    count++;
+  }
+  // Moving backward, becrement counter
+  else if ( motorDirection == -1 )
+  {
+    count--;
+  }
   
-  count++;
-  
-  Serial.print("Count = ");
+  Serial.print("CountInt - Count increased: Count = ");
   Serial.println(count);  
   
   // Service routine to stop the robot
-  if(count == currentCount + countIncrement)
-  {
-    Serial.println("Braking");
-    
+  if ( count == (currentCount + countIncrement) )
+  { 
     // Toggle one motor pin to make both either 0 or 1
-    digitalWrite(MOTOR_A_P, !digitalRead(MOTOR_A_P));
+    //digitalWrite( MOTOR_A_P, !digitalRead( MOTOR_A_P ) );
     
     // Brake motor
-    analogWrite(MOTOR_EN_P, 255);
+    analogWrite( MOTOR_EN_P, 0);
     
     // Robot is no longer moving
     moving = false;
-    
    }
 }
 
