@@ -40,7 +40,7 @@
    Questions: terry@yourduino.com
 */
 
-/*-----( Import needed libraries )-----*/
+/*-----( Needed libraries )-----*/
 #include <SPI.h>       // SPI bus Library
 #include <SD.h>        // SD Library
 #include "RF24.h"      // RF Module Library
@@ -59,62 +59,83 @@
 #define MOTOR_A_P 25      // PWM A (out) => pin25
 #define MOTOR_B_P 26      // PWM B (out) => pin26
 #define MOTOR_EN_P 13     // Motor enable => pin13
-#define MAX_SPEED 255     // Motor max PWM (count)
+#define MAX_SPEED 240     // Motor max PWM (count)
+#define MOTOR_SPEED 220   // Normal motor speed
 
 /*-----( Global Variables )-----*/
-//const uint64_t pipe = 0xF0F0F0F0D2LL; // Define the transmit pipe
-long count;                             // Current number of interrupts from encoder
-long countIncrement;
-long loopCount;
+const uint64_t pipe = 0xF0F0F0F0D2LL; // Define the transmit pipe **LL IS LONGLONG**
+long count;                           // Current number of interrupts from encoder
+long countIncrement;                  // Number of counts per user interval spec
+long loopCount;                       // Number of times count increment met
+int motorDirection;                   // Direction the robot is moving
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 
+
+/*-----( ADRDUINO FUNCTIONS )-----*/
 /*
   Setup: Set up all required I/O and global variables
 */
 void setup()
+{  
+  
+  // Laser initialization
+  Serial.begin(115200);   // runs with 115200 baud
+  
+  
+  // Assign global variables
+  count = 0;
+  loopCount = 0;
+  countIncrement = 50;
+  motorDirection = 1;
+  
+  // Set up rotary encoder interrupt
+  attachInterrupt(2, countInt, CHANGE);
+  
+  // SD card Initialization
+  Serial.println("Initializing SD card..."); // throw error is fail ***
+  if(SD.begin(SD_CS_P))
   {
-    //115200 baud for laser
-    Serial.begin(115200);
+     Serial.println("SD card initialized successfully.\n");
+  }
   
-    //Initialize the SD card
-    Serial.println("Initializing SD card...");
-  
-    if(SD.begin(SD_CS_P)){
-       Serial.println("SD card initialized successfully.\n");
-    }
-  
-    //Set up rotary encoder interrupt
-    count = 0;
-    attachInterrupt(2, countInt, CHANGE);
-  
-    //Set up motor pins
-    pinMode(MOTOR_A_P, OUTPUT);
-    pinMode(MOTOR_B_P, OUTPUT);
-    pinMode(MOTOR_EN_P, OUTPUT);
- 
-    digitalWrite(MOTOR_A_P, HIGH);
-    digitalWrite(MOTOR_B_P, LOW);
-    analogWrite(MOTOR_EN_P, 0);
-  
-    //RF Initialization
-    printf_begin();
-    radio.begin();
-    Serial.println("RF Module information:");
-    radio.printDetails();
-  
-  }//--(end setup )---
+  // Set up motor pin modes
+  pinMode(MOTOR_A_P, OUTPUT);
+  pinMode(MOTOR_B_P, OUTPUT);
+  pinMode(MOTOR_EN_P, OUTPUT);
 
+  // Motor initialization
+  digitalWrite(MOTOR_A_P, HIGH);
+  digitalWrite(MOTOR_B_P, LOW);
+  analogWrite(MOTOR_EN_P, 0);
+  
+  // RF Initialization
+  printf_begin();
+  radio.begin();
+  Serial.println("RF Module information:");
+  radio.printDetails();
+  
+  
+}//--( end setup )---
 
-//The magic occurs here
-void loop()   /****** LOOP: RUNS CONSTANTLY ******/
+/*
+  loop: MAIN ENTRY FOR MEGA, RUNS CONSTANTLY
+*/
+void loop()
 { 
+  move();
+  delay(2000);
+  changeDirection();
   
-}//--(end main loop )---
+  move();
+  delay(2000);
+  changeDirection();
+  
+}//--( end main loop )---
 
 
-//-- USER FUNCTIONS 
+/*-----( USER FUNCTIONS )-----*/
 
 //This function moves the robot the distance represented by the value in
 //countIncrement. This variable will be set during the initialization
@@ -125,164 +146,85 @@ void loop()   /****** LOOP: RUNS CONSTANTLY ******/
 //begin to slow back down to a stop for the second half.
 
 //NOTE: play with delay values and while loop conditions once motor is functional
-void move () {
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
-  
+void move ()
+{
   //save the current position
   long currentCount = count;
+//  int motorSpeed = 0;
   
-  int motorSpeed = 0;
-  
-<<<<<<< HEAD
-  
-  if (dir == 1){
-     digitalWrite(MOTOR_A_P, LOW);
-     digitalWrite(MOTOR_B_P, HIGH);
-  } else {
-      digitalWrite(MOTOR_A_P, HIGH);
-      digitalWrite(MOTOR_B_P, LOW);
+  // Set PWM with respect to direction
+  /*if (motorDirection == 1)  // Move forward
+  {
+    digitalWrite(MOTOR_A_P, HIGH);
+    digitalWrite(MOTOR_B_P, LOW);
   }
-  
-  //Serial.println("Speeding up");
-  
-   while (count < (currentCount + countIncrement - 20)) {
-=======
-   //speed up until half of the distance is traversed
-   while (count < (currentCount + countIncrement / 2)) {
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
-      
-     analogWrite(MOTOR_EN, motorSpeed);
-     
-     if(motorSpeed + 30 > MAX_SPEED){
-       motorSpeed = MAX_SPEED;
-     } else {
-       motorSpeed+=30;
-     }
-     delay(300);
- 
-     }
-    
-
-<<<<<<< HEAD
-   //Serial.println("Slowing speed.");
-   
-   motorSpeed = 200;
-   analogWrite(MOTOR_EN_P, motorSpeed);
-   
-       /*
-=======
-     //Speed down in the exact opposite fashion as above
-     while (count < (currentCount + countIncrement)) {
-      
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
-       analogWrite(MOTOR_EN_P, motorSpeed);
-     
-       if (motorSpeed - 15 < 0) {
-         motorSpeed = 0;
-       } else {
-         Serial.println("Slowing down");
-         motorSpeed -= 15;
-       }
-       
-       delay(100);
- 
-     }
-     */
- 
-  //Serial.println("Waiting");
-  
-<<<<<<< HEAD
-  while ((count < currentCount + countIncrement - 5)){
-    delay(1);
-  }
-  
-  Serial.println("Braking");
-
-    if (dir == 1) {
-      digitalWrite(MOTOR_A_P, HIGH);
-    } else {
-       digitalWrite(MOTOR_A_P, LOW);
-     }
-     
-=======
-    //Cause the H-bridge to brake the motor
+  else if (motorDirection == -1)// Move backward
+  {
     digitalWrite(MOTOR_A_P, LOW);
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
-    analogWrite(MOTOR_EN_P, 255);
-    
-    delay(50);
-    
-    //Set motor back to the forward direction and disable it
-    analogWrite(MOTOR_EN_P, 0);
-<<<<<<< HEAD
-    
-    if (dir == 1) {
-      digitalWrite(MOTOR_A_P, LOW);
-    } else {
-      digitalWrite(MOTOR_A_P, HIGH);   
-    }
+    digitalWrite(MOTOR_B_P, HIGH);
+  }*/
+  
+  // Set Motor Speed
+//  while (count < (currentCount + countIncrement - 20))
+//  {
+//speed up until half of the distance is traversed
+
+    // Set normal speed
+    analogWrite(MOTOR_EN_P, MOTOR_SPEED);
+     
+//    if(motorSpeed + 30 > MAX_SPEED)
+//    {
+//      motorSpeed = MAX_SPEED;
+//    }
+//    else
+//    {
+//      motorSpeed+=30;
+//    }
+     
+  //  delay(300);
+  //}
+  //Serial.println("Slowing speed.");
+  //motorSpeed = 200;
+  //analogWrite(MOTOR_EN_P, motorSpeed);
    
-   Serial.print(count - currentCount);
-=======
-    digitalWrite(MOTOR_A_P, HIGH);   
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
+  //while ((count < currentCount + countIncrement - 5)){
+  //  delay(1);
+  //}
   
-    return;
   
-<<<<<<< HEAD
+  
+  return;
 }
 
-  void setup()   /****** SETUP: RUNS ONCE ******/
+/*
+  Change Direction:
+*/
+void changeDirection()
 {
-  Serial.begin(115200);
-  
-  Serial.println("Initializing SD card...");
-  
-  if(SD.begin(SD_CS)){
-     Serial.println("SD card initialized successfully.\n");
+  Serial.print("Direction = ");
+  Serial.println(motorDirection);
+  analogWrite(MOTOR_EN_P, 0);
+  delay(50);
+  // Already moving forward, so..
+  if(motorDirection == 1)
+  {
+    // Set to move backwards
+    motorDirection = -1;
+    Serial.print("motor direction switched = ");
+    Serial.println(motorDirection);
+    digitalWrite(MOTOR_A_P, LOW);
+    digitalWrite(MOTOR_B_P, HIGH);
   }
-  
-  //Set up rotary encoder interrupt
-  count = 0;
-  attachInterrupt(2, countInt, CHANGE);
-  
-  //Set up motor pins
-  pinMode(MOTOR_A_P, OUTPUT);
-  pinMode(MOTOR_B_P, OUTPUT);
-  pinMode(MOTOR_EN_P, OUTPUT);
- 
-  digitalWrite(MOTOR_A_P, HIGH);
-  digitalWrite(MOTOR_B_P, LOW);
-  digitalWrite(MOTOR_EN_P, LOW);
-  
-  //RF Initialization
-  printf_begin();
-  radio.begin();
-  Serial.println("RF Module information:");
-  radio.printDetails();
-  
-  loopCount = 0;
-  countIncrement = 50;
-  
-}//--(end setup )---
+  // Already moving backward, so...
+  else if(motorDirection == -1)
+  {
+        // Set to move backwards
+    motorDirection = 1;
+    digitalWrite(MOTOR_A_P, HIGH);
+    digitalWrite(MOTOR_B_P, LOW);
+  }
+}
 
-
-void loop()   /****** LOOP: RUNS CONSTANTLY ******/
-{ 
-  delay(500);
-  
-  move(0);
-  
-  delay(500);
-  
-  move(1);
-  
-}//--(end main loop )---
-
-
-=======
-}  
->>>>>>> ab7fbbb96b7a35d5052d3733bbe5005d823f4da0
 
 //ISR for the rotary encoder
 //Increments the counter variable by 1 every time it is triggered on both the rising
@@ -290,6 +232,18 @@ void loop()   /****** LOOP: RUNS CONSTANTLY ******/
 //disc. With a 1 5/8 diameter wheel, this equals 0.38" per interrupt
 void countInt(){
   count++;
+  
+  // Service routine to stop the robot
+  if(count == countIncrement)
+  {
+    Serial.println("Braking");
+    analogWrite(MOTOR_EN_P, 0);
+  }
+  
+  
+  Serial.print("Count = ");
+  Serial.println(count);  
+  
 }
 
 
