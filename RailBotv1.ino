@@ -50,32 +50,49 @@
 
 /*-----( Pin Definitions )-----*/
 // Digital Components
-#define SD_CS_P 24         // SD Chip Select (out) => pin24
-#define RF_CS_P 22         // RF Chip Select (out) => pin22
-#define RF_CSN_P 23        // RF_ (out) => pin23
-#define LASER_ON_P = 7;    // Laser on (out) pin+7
-#define LASER_OFF_P = 8;   // Laser off (out) => pin8
+#define SD_CS_P 24           // SD Chip Select (out) => pin24
+#define RF_CS_P 22           // RF Chip Select (out) => pin22
+#define RF_CSN_P 23          // RF_ (out) => pin23
+#define LASER_ON_P 27        // Laser on (out) => pin25
+#define LASER_OFF_P 28       // Laser off (out) => pin27
 
 // Analong Components
 #define MOTOR_A_P 26         // PWM A (out) => pin25
 #define MOTOR_B_P 25         // PWM B (out) => pin26
 #define MOTOR_EN_P 13        // Motor enable => pin13
-#define MAX_SPEED 255        // Motor max PWM (count)
-#define MOTOR_SPEED 255      // Normal motor speed
-#define MOTOR_ADJ_SPEED 200  // Ajusting motor speed 
+
+// Other Deinitions
+#define SHORT_PRESS 400                  // Button press short
+#define LONG_PRESS 1500                  // Button press long
+#define MAX_SPEED 255                    // Motor max PWM (count)
+#define MOTOR_SPEED 255                  // Normal motor speed
+#define MOTOR_ADJ_SPEED 200              // Ajusting motor speed 
+#define ENCODER_DIA_INCHES (PI*13/8)  // Diameter of encoder in inches
 
 /*-----( Global Variables )-----*/
+// RF Control
 const uint64_t pipe = 0xF0F0F0F0D2LL; // Define the transmit pipe **LL IS LONGLONG**
+
+// SD Control
+File myFile;
+
+// Motor Control
 long count;                           // Current number of interrupts from encoder
 long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
+long countRemainder;
 long loopCount;                       // Number of times count increment met
 int motorDirection;                   // Direction the robot is moving
-volatile boolean moving;              // Whether or not robot is currently moving. Declared as volatile so
+volatile boolean isMoving;            // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
-                                      
-int testCounter;                                      
+// Laser Control
+boolean isMeasureing;
 
+// Debug/Testing
+int testCounter;                                      
+int feet;
+int inches;
+float percision;
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
@@ -87,42 +104,56 @@ RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 */
 void setup()
 {    
-  // Laser initialization
+  /* Laser initialization */
   Serial.begin(115200);   // runs with 115200 baud
   
-  // Assign global variables
+  // Laser pins
+  pinMode( LASER_ON_P, OUTPUT );      
+  pinMode( LASER_OFF_P, OUTPUT ); 
+ 
+  // Motor control globals
   count = 0;
   loopCount = 0;
-  countIncrement = 188;
   motorDirection = 1;
-  
-  // Set up rotary encoder interrupt
+
+  // Motor pin modes
+  pinMode( MOTOR_A_P, OUTPUT );
+  pinMode( MOTOR_B_P, OUTPUT );
+  pinMode( MOTOR_EN_P, OUTPUT );
+
+  // Motor Initialize
+  digitalWrite( MOTOR_A_P, HIGH );
+  digitalWrite( MOTOR_B_P, LOW );
+  analogWrite( MOTOR_EN_P, 0 );
+
+  // Rotary encoder interrupt
   attachInterrupt( 2, countInt, CHANGE );
   
   // SD card Initialization
+  pinMode( SD_CS_P, OUTPUT );
   Serial.println("Initializing SD card..."); // throw error if fail ***
   if ( SD.begin(SD_CS_P) )
   {
      Serial.println("SD card initialized successfully.\n");
   }
-  
-  // Set up motor pin modes
-  pinMode( MOTOR_A_P, OUTPUT );
-  pinMode( MOTOR_B_P, OUTPUT );
-  pinMode( MOTOR_EN_P, OUTPUT );
 
-  // Motor initialization
-  digitalWrite( MOTOR_A_P, HIGH );
-  digitalWrite( MOTOR_B_P, LOW );
-  analogWrite( MOTOR_EN_P, 0 );
-  
   // RF Initialization
+  pinMode( RF_CS_P, OUTPUT );
+  pinMode( RF_CSN_P, OUTPUT );
   printf_begin();
   radio.begin();
   Serial.println("RF Module information:");
   radio.printDetails();
 
-  Serial.println("Setup - Setup compelte!");  
+
+
+  // Test info
+  testCounter = 0;
+  feet = 2;
+  inches = 6;
+  percision = 0;
+  
+  increment2count(feet, inches, percision);
   
 }//--( end setup )---
 
@@ -132,10 +163,13 @@ void setup()
 void loop()
 { 
   
-if(testCounter < 1){
+if(testCounter < 2){
   Serial.println("loop - Moving Forward...");
+  laserOn();
   driveMotor();
   resetMotor();
+  takeMeasurement();
+  laserOff();
   Serial.println("loop - Increment traversed!");
   delay(2000);
 }
@@ -152,6 +186,19 @@ Serial.println(testCounter);
 
 
 /*-----( USER FUNCTIONS )-----*/
+
+
+void increment2count(int feet, int inches, float percision)
+{
+   float count_estimation;
+   count_estimation = (feet*12 + inches + percision) * (ENCODER_DIA_INCHES)/16;
+   countIncrement = floor(count_estimation);
+   Serial.print("Total inches = ");
+   Serial.print(count_estimation);
+   Serial.print("Total counts = ");
+   Serial.println(countIncrement);
+   countRemainder = count_estimation - (int)count_estimation;
+}
 
 /*
   Drive Motor: An algorithm to efficiently get the robot to the next position. This
@@ -188,10 +235,10 @@ void driveMotor ()
     analogWrite( MOTOR_EN_P, temp_speed );
     
     // Robot is now moving
-    moving = true;
+    isMoving = true;
         
     // Begin counting traversal
-    while( moving ); // Wait until ISR stops robot
+    while( isMoving ); // Wait until ISR stops robot
     delay(1000);     // Slowdown time
       
     Serial.println("driveMotor - Done Moving.");
@@ -292,7 +339,7 @@ void resetMotor() {
 //ISR for the rotary encoder
 //Increments the counter variable by 1 every time it is triggered on both the rising
 //and falling edge of the signal. This translates into 16 interrupts per rotation of the 
-//disc. With a 1 5/8 diameter wheel, this equals 0.38" per interrupt
+//disc. With a 1 5/8 diameter wheel, this equals 0.319068" per interrupt (1 5/8 * pi / 16)
 //Brakes motor once desired distance was traveled
 void countInt(){
 
@@ -321,8 +368,123 @@ void countInt(){
     analogWrite(MOTOR_EN_P, 255);
     
     // Robot is no longer moving
-    moving = false;
+    isMoving = false;
    }
 }
 
 
+/*
+  Laser On: Pulse Mega pin 7 to turn on
+*/
+void laserOn()
+{
+  // Pulse IO to tigger off
+  digitalWrite(LASER_ON_P, HIGH); 
+  delay(SHORT_PRESS);
+  digitalWrite(LASER_ON_P, LOW);
+  delay(500);
+  return;
+}
+
+/*
+  Laser Off: Pulse Mega pin 8 to turn off
+*/
+void laserOff()
+{
+  // Pulse IO to trigger on 
+  digitalWrite(LASER_OFF_P, HIGH); 
+  delay(LONG_PRESS);
+  digitalWrite(LASER_OFF_P, LOW);
+  delay(500);
+  return;
+}
+
+/*
+  Stop Continuous: 
+*/
+void stopMeasureing()
+{
+  // Pulse laser on to stop measurments
+  digitalWrite(LASER_ON_P, HIGH); 
+  delay(SHORT_PRESS);
+  digitalWrite(LASER_ON_P, LOW);
+  
+  isMeasureing = 0;
+  delay(500);
+  return;  
+}
+
+/*
+  Inititiate Continuous:
+*/
+void startMeasureing()
+{
+  // Hold laser on to begin continuous measurements
+  digitalWrite(LASER_ON_P, HIGH); 
+  delay(1000);
+  digitalWrite(LASER_ON_P, LOW);
+  
+  isMeasureing = 1;
+  delay(500);
+  return;
+}
+
+
+/*
+  Get Distance: Retreives distance from Rx, stores to SD card
+*/
+void GetDist(void){
+  String dist_m;
+  String dist_mm;
+  String temp;
+  char buf[32];
+  int rc = 0;
+  
+  // RC will be 21 with valid data
+  rc = Serial.readBytesUntil('#', buf, sizeof(buf));
+    
+  // Only if valid data
+  if (rc == 21){
+    buf[rc] = '\0';
+    temp = String(buf);
+    dist_m = temp.substring(14,16);  
+    dist_mm = temp.substring(16,19);
+    
+    // Print formatting
+    Serial.print("Distance: ");
+    Serial.print(dist_m);
+    Serial.print('.');
+    Serial.print(dist_mm);
+    Serial.println(" m");
+   
+    if(myFile) {
+      Serial.println("Writing to card");
+      myFile.print("Distance: ");
+      myFile.print(dist_m);
+      myFile.print('.');
+      myFile.print(dist_mm);
+      myFile.println(" m. Position: ");
+    }
+  }  
+  return;
+}
+
+/*
+  Test Measurement: Continuous measurement
+*/
+void takeMeasurement()
+{
+    // Start continuous measurements  
+    startMeasureing();
+    
+    // Wait time?
+    delay(25);
+
+    // Sample the distance a few times, play with i and delays
+    GetDist();
+    
+    // Stop taking measurements
+    stopMeasureing();
+    
+ return;
+}
