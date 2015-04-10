@@ -93,7 +93,7 @@ void setup()
   // Assign global variables
   count = 0;
   loopCount = 0;
-  countIncrement = 25;
+  countIncrement = 188;
   motorDirection = 1;
   
   // Set up rotary encoder interrupt
@@ -132,10 +132,10 @@ void setup()
 void loop()
 { 
   
-if(testCounter <3){
+if(testCounter < 1){
   Serial.println("loop - Moving Forward...");
   driveMotor();
-  //resetMotor();
+  resetMotor();
   Serial.println("loop - Increment traversed!");
   delay(2000);
 }
@@ -276,8 +276,16 @@ void resetMotor() {
   // Turn off motor
   analogWrite( MOTOR_EN_P, 0 );
   
-  // Restore direction before ISR braked
-  digitalWrite( MOTOR_A_P, !(digitalRead(MOTOR_A_P)) );
+  if ( motorDirection == 1 )
+  {
+    digitalWrite( MOTOR_A_P, HIGH );
+    digitalWrite( MOTOR_B_P, LOW );
+  }
+  else if ( motorDirection == -1 )
+  {
+    digitalWrite( MOTOR_A_P, LOW );
+    digitalWrite( MOTOR_B_P, HIGH );
+  }
   
 }
 
@@ -305,11 +313,12 @@ void countInt(){
   // Service routine to stop the robot
   if ( count == (currentCount + countIncrement) )
   { 
+    Serial.println("ISR Stopping motor");
     // Toggle one motor pin to make both either 0 or 1
-    //digitalWrite( MOTOR_A_P, !digitalRead( MOTOR_A_P ) );
+    digitalWrite(MOTOR_A_P, !digitalRead( MOTOR_A_P ) );
     
     // Brake motor
-    analogWrite( MOTOR_EN_P, 0);
+    analogWrite(MOTOR_EN_P, 255);
     
     // Robot is no longer moving
     moving = false;
