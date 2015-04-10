@@ -307,7 +307,7 @@ void countInt(){
     count--;
   }
   
-  Serial.print("CountInt - Count increased: Count = ");
+  Serial.print("CountInt - Count changed: Count = ");
   Serial.println(count);  
   
   // Service routine to stop the robot
