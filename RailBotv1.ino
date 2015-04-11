@@ -62,6 +62,7 @@
 #define MOTOR_EN_P 13        // Motor enable => pin13
 
 // Other Deinitions
+#define INTERRUPT_2 2                    // Encoder Interrupt
 #define SHORT_PRESS 400                  // Button press short
 #define LONG_PRESS 1500                  // Button press long
 #define MAX_SPEED 255                    // Motor max PWM (count)
@@ -127,7 +128,7 @@ void setup()
   analogWrite( MOTOR_EN_P, 0 );
 
   // Rotary encoder interrupt
-  attachInterrupt( 2, countInt, CHANGE );
+  attachInterrupt( INTERRUPT_2, countInt, CHANGE );
   
   // SD card Initialization
   pinMode( SD_CS_P, OUTPUT );
@@ -135,6 +136,7 @@ void setup()
   if ( SD.begin(SD_CS_P) )
   {
      Serial.println("SD card initialized successfully.\n");
+     myFile = SD.open("test.txt", FILE_WRITE);
   }
 
   // RF Initialization
@@ -170,6 +172,7 @@ if(testCounter < 2){
   resetMotor();
   takeMeasurement();
   laserOff();
+  myFile.close();
   Serial.println("loop - Increment traversed!");
   delay(2000);
 }
@@ -450,6 +453,9 @@ void GetDist(void){
     dist_m = temp.substring(14,16);  
     dist_mm = temp.substring(16,19);
     
+    Serial.print("This is the buffer: ");
+    Serial.println(buf);
+    
     // Print formatting
     Serial.print("Distance: ");
     Serial.print(dist_m);
@@ -476,9 +482,6 @@ void takeMeasurement()
 {
     // Start continuous measurements  
     startMeasureing();
-    
-    // Wait time?
-    delay(25);
 
     // Sample the distance a few times, play with i and delays
     GetDist();
