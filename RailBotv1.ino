@@ -47,10 +47,11 @@
 #include "RF24.h"      // RF Module Library
 #include "printf.h"    // RF Printf Library
 #include "nRF24L01.h"  // RF Module Definitions
+#include <LiquidCrystal.h>
 
 /*-----( Pin Definitions )-----*/
 // Digital Components
-#define SD_CS_P 49           // SD Chip Select (out) => pin49
+#define SD_CS_P 41           // SD Chip Select (out) => pin49
 #define RF_CS_P 48           // RF Chip Select (out) => pin48
 #define RF_CSN_P 47          // RF_ (out) => pin47
 <<<<<<< HEAD
@@ -101,7 +102,7 @@ float percision;
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
-
+LiquidCrystal lcd(8,9,4,5,6,7);
 
 /*-----( ADRDUINO FUNCTIONS )-----*/
 /*
@@ -111,6 +112,12 @@ void setup()
 {    
   /* Laser initialization */
   Serial.begin(115200);   // runs with 115200 baud
+  laserOff();
+  
+  lcd.begin(16,2);
+  lcd.print("CRANE TEAM");
+  lcd.setCursor(0,1);
+  lcd.print("RAILBOT");
   
   // Laser pins
   pinMode( LASER_ON_P, OUTPUT );      
