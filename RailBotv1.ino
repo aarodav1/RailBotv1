@@ -42,12 +42,12 @@
 */
 
 /*-----( Needed libraries )-----*/
-#include <SPI.h>       // SPI bus Library
-#include <SD.h>        // SD Library
-#include "RF24.h"      // RF Module Library
-#include "printf.h"    // RF Printf Library
-#include "nRF24L01.h"  // RF Module Definitions
-#include <LiquidCrystal.h>
+#include <SPI.h>           // SPI bus Library
+#include <SD.h>            // SD Library
+#include <LiquidCrystal.h> // LCD Library
+#include "RF24.h"          // RF Module Library
+#include "printf.h"        // RF Printf Library
+#include "nRF24L01.h"      // RF Module Definitions
 
 /*-----( Pin Definitions )-----*/
 // Digital Components
@@ -55,25 +55,21 @@
 #define RF_CS_P 48           // RF Chip Select (out) => pin48
 #define RF_CSN_P 47          // RF_ (out) => pin47
 
-#define LASER_ON_P 44        // Laser on (out) => pin51
-#define LASER_OFF_P 43       // Laser off (out) => pin50
 #define LASER_ON_P 43        // Laser on (out) => pin51
 #define LASER_OFF_P 44       // Laser off (out) => pin50
-#define LASER_ON_P 51        // Laser on (out) => pin51
-#define LASER_OFF_P 50       // Laser off (out) => pin50
 
 // Analong Components
-#define MOTOR_A_P 52         // PWM A (out) => pin52
-#define MOTOR_B_P 53         // PWM B (out) => pin53
+#define MOTOR_A_P 46         // PWM A (out) => pin52
+#define MOTOR_B_P 45         // PWM B (out) => pin53
 #define MOTOR_EN_P 13        // Motor enable => pin13
 
 // Other Deinitions
-#define SHORT_PRESS 400                  // Button press short
-#define LONG_PRESS 1500                  // Button press long
-#define MAX_SPEED 255                    // Motor max PWM (count)
-#define MOTOR_SPEED 255                  // Normal motor speed
-#define MOTOR_ADJ_SPEED 200              // Ajusting motor speed 
-#define ENCODER_DIA_INCHES (PI*13/8)  // Diameter of encoder in inches
+#define SHORT_PRESS 400               // Button press short (ms)
+#define LONG_PRESS 1500               // Button press long (ms)
+#define MAX_SPEED 255                 // Motor max PWM (count)
+#define MOTOR_SPEED 255               // Normal motor speed (pwm)
+#define MOTOR_ADJ_SPEED 200           // Ajusting motor speed (pwm)
+#define ENCODER_DIA_INCHES (PI*26/8)  // Diameter of encoder in inches (inches)
 
 /*-----( Global Variables )-----*/
 // RF Control
@@ -86,13 +82,19 @@ File myFile;
 long count;                           // Current number of interrupts from encoder
 long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
-long countRemainder;
+long countRemainder;                  // 
+long incrementFeet;                   // Feet per increment
+long totalDistance;                   // Total feet of survey
 long loopCount;                       // Number of times count increment met
-int motorDirection;                   // Direction the robot is moving
+int  motorDirection;                   // Direction the robot is moving
+int  currentMenu;                     // Menu to be displayed to user
 volatile boolean isMoving;            // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
 // Laser Control
 boolean isMeasureing;
+
+// Survey Initialization
+boolean surveyStarted;
 
 // Debug/Testing
 int testCounter;                                      
@@ -102,6 +104,8 @@ float percision;
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
+
+/*-----( Instantiate LCD )-----*/
 LiquidCrystal lcd(8,9,4,5,6,7);
 
 /*-----( ADRDUINO FUNCTIONS )-----*/
@@ -114,14 +118,29 @@ void setup()
   Serial.begin(115200);   // runs with 115200 baud
   laserOff();
   
+  // LCD initialization
   lcd.begin(16,2);
+  /* **** Requires backlight wire to be interfaced
+  //button adc input
+  pinMode( BUTTON_ADC_PIN, INPUT );         //ensure A0 is an input
+  digitalWrite( BUTTON_ADC_PIN, LOW );      //ensure pullup is off on A0
+  //lcd backlight control
+  digitalWrite( LCD_BACKLIGHT_PIN, HIGH );  //backlight control pin D3 is high (on)
+  pinMode( LCD_BACKLIGHT_PIN, OUTPUT );     //D3 is an output
+  */
   lcd.print("CRANE TEAM");
   lcd.setCursor(0,1);
   lcd.print("RAILBOT");
+  incrementFeet = 0;
+  totalDistance = 0;
+  surveyStarted = false;
+  currentMenu = 0;
   
   // Laser pins
   pinMode( LASER_ON_P, OUTPUT );      
   pinMode( LASER_OFF_P, OUTPUT ); 
+  laserOff();
+  laserOn();
  
   // Motor control globals
   count = 0;
@@ -147,6 +166,7 @@ void setup()
   if ( SD.begin(SD_CS_P) )
   {
      Serial.println("SD card initialized successfully.\n");
+     myFile = SD.open("test.txt", FILE_WRITE);
   }
 
   // RF Initialization
@@ -156,8 +176,6 @@ void setup()
   radio.begin();
   Serial.println("RF Module information:");
   radio.printDetails();
-
-
 
   // Test info
   testCounter = 0;
@@ -174,17 +192,25 @@ void setup()
 */
 void loop()
 { 
+  displayMenu();
+  delay(4000);
   
-if(testCounter < 2){
-  Serial.println("loop - Moving Forward...");
-  laserOn();
-  driveMotor();
-  resetMotor();
-  takeMeasurement();
-  laserOff();
-  Serial.println("loop - Increment traversed!");
-  delay(2000);
-}
+  currentMenu++;
+  
+  
+  if(surveyStarted)
+  {
+    if(testCounter < 3)
+    {
+      Serial.println("loop - Moving Forward...");
+      driveMotor();
+      resetMotor();
+      takeMeasurement();
+      Serial.println("loop - Increment traversed!");
+      delay(2000);
+    }
+  }
+  
 testCounter++;
 Serial.print("Test counter: ");
 Serial.println(testCounter);
@@ -199,6 +225,37 @@ Serial.println(testCounter);
 
 /*-----( USER FUNCTIONS )-----*/
 
+void displayMenu()
+{ 
+  switch(currentMenu)
+  {
+    case 0: lcd.clear();
+            lcd.print("Welcome");
+            break;
+    case 1: lcd.clear();
+            lcd.print("Runway Length: ");
+            lcd.setCursor(0,1);
+            lcd.print(totalDistance);
+            lcd.print(" ft");
+            break;
+    case 2: lcd.clear();
+            lcd.print("Resolution: ");
+            lcd.setCursor(0,1);
+            lcd.print(incrementFeet);
+            lcd.print(" ft");
+            break;
+    case 3: lcd.clear();
+            lcd.print("Start Survey");
+            lcd.setCursor(0,1);
+            lcd.print("Press Select");
+            break;
+  }
+}
+
+
+int menuSelection(){
+  
+}
 
 void increment2count(int feet, int inches, float percision)
 {
@@ -390,10 +447,11 @@ void countInt(){
 */
 void laserOn()
 {
-  // Pulse IO to tigger off
+  // Pulse IO to tigger on
   digitalWrite(LASER_ON_P, HIGH); 
-  delay(SHORT_PRESS);
+  delay(300);
   digitalWrite(LASER_ON_P, LOW);
+  //Serial.println("laserOn - Laser turned on");
   delay(500);
   return;
 }
@@ -403,31 +461,17 @@ void laserOn()
 */
 void laserOff()
 {
-  // Pulse IO to trigger on 
+  // Pulse IO to trigger off
   digitalWrite(LASER_OFF_P, HIGH); 
   delay(LONG_PRESS);
   digitalWrite(LASER_OFF_P, LOW);
+  //Serial.println("laserOff - Laser turned off");
   delay(500);
   return;
 }
 
 /*
-  Stop Continuous: 
-*/
-void stopMeasureing()
-{
-  // Pulse laser on to stop measurments
-  digitalWrite(LASER_ON_P, HIGH); 
-  delay(SHORT_PRESS);
-  digitalWrite(LASER_ON_P, LOW);
-  
-  isMeasureing = 0;
-  delay(500);
-  return;  
-}
-
-/*
-  Inititiate Continuous:
+  Start Measureing:
 */
 void startMeasureing()
 {
@@ -437,8 +481,25 @@ void startMeasureing()
   digitalWrite(LASER_ON_P, LOW);
   
   isMeasureing = 1;
+  Serial.println("startMeasureing - Taking measurement...");
   delay(500);
   return;
+}
+
+/*
+  Stop Measureing: 
+*/
+void stopMeasureing()
+{
+  // Pulse laser on to stop measurments
+  digitalWrite(LASER_ON_P, HIGH); 
+  delay(100);
+  digitalWrite(LASER_ON_P, LOW);
+  
+  isMeasureing = 0;
+  Serial.println("stopMeasureing - Finished measurement!");
+  delay(500);
+  return;  
 }
 
 
@@ -452,51 +513,80 @@ void GetDist(void){
   char buf[32];
   int rc = 0;
   
-  // RC will be 21 with valid data
-  rc = Serial.readBytesUntil('#', buf, sizeof(buf));
+  // debug
+  //Serial.println("GetDist - Reading from Rx...");
+  
+  startMeasureing();
+
+  delay(50);
+  
+  //startMeasureing();
+  while(true)
+  {
+  //do
+ // {
+    // RC will be 21 with valid data
+    rc = Serial.readBytesUntil('#', buf, sizeof(buf));
+    //Serial.print("rc = ");
+    //Serial.println(rc);
+    //Serial.print("buf = ");
+    //Serial.println(buf);
+    /* // Check for Error
+    if( rc == 200 )
+    {
+      
+    }*/
     
+    // Wait until vaild read
+  //} while( rc != 21 );
+  //stopMeasureing();
+  //Serial.println("GetDist - Done reading from Rx!!");
+
   // Only if valid data
-  if (rc == 21){
-    buf[rc] = '\0';
-    temp = String(buf);
-    dist_m = temp.substring(14,16);  
-    dist_mm = temp.substring(16,19);
+    if (rc == 21){
+      buf[rc] = '\0';
+      temp = String(buf);
+      dist_m = temp.substring(14,16);  
+      dist_mm = temp.substring(16,19);
     
-    // Print formatting
-    Serial.print("Distance: ");
-    Serial.print(dist_m);
-    Serial.print('.');
-    Serial.print(dist_mm);
-    Serial.println(" m");
+      // Print formatting
+      Serial.print("Distance: ");
+      Serial.print(dist_m);
+      Serial.print('.');
+      Serial.print(dist_mm);
+      Serial.println(" m");
    
-    if(myFile) {
-      Serial.println("Writing to card");
-      myFile.print("Distance: ");
-      myFile.print(dist_m);
-      myFile.print('.');
-      myFile.print(dist_mm);
-      myFile.println(" m. Position: ");
-    }
-  }  
+      if(myFile) {
+        Serial.println("Writing to card");
+        myFile.print("Distance: ");
+        myFile.print(dist_m);
+        myFile.print('.');
+        myFile.print(dist_mm);
+        myFile.println(" m. Position: ");
+       }
+    // Stop taking measurements
+    stopMeasureing();
+     return;
+     }
+   }  
+  
+    // debug
+    //Serial.println("GetDist - Done reading, wrote to SD Card");
   return;
 }
 
 /*
-  Test Measurement: Continuous measurement
+  Test Measurement: Starts and stops continuous measurements
 */
 void takeMeasurement()
 {
     // Start continuous measurements  
-    startMeasureing();
-    
-    // Wait time?
-    delay(25);
+    //startMeasureing();
+
+    //delay(50);
 
     // Sample the distance a few times, play with i and delays
     GetDist();
-    
-    // Stop taking measurements
-    stopMeasureing();
     
  return;
 }
