@@ -53,12 +53,12 @@
 #define SD_CS_P 49           // SD Chip Select (out) => pin49
 #define RF_CS_P 48           // RF Chip Select (out) => pin48
 #define RF_CSN_P 47          // RF_ (out) => pin47
-#define LASER_ON_P 51        // Laser on (out) => pin51
-#define LASER_OFF_P 50       // Laser off (out) => pin50
+#define LASER_ON_P 43        // Laser on (out) => pin51
+#define LASER_OFF_P 44       // Laser off (out) => pin50
 
 // Analong Components
-#define MOTOR_A_P 52         // PWM A (out) => pin52
-#define MOTOR_B_P 53         // PWM B (out) => pin53
+#define MOTOR_A_P 45         // PWM A (out) => pin52
+#define MOTOR_B_P 46         // PWM B (out) => pin53
 #define MOTOR_EN_P 13        // Motor enable => pin13
 
 // Other Deinitions
