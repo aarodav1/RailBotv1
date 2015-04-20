@@ -156,10 +156,10 @@ void setup()
   lcd.print("CRANE TEAM");
   lcd.setCursor(0,1);
   lcd.print("RAILBOT");
-  incrementFeet = 0;
-  incrementInches = 0;
-  totalLengthFeet = 0;
-  totalLengthInches = 0;
+  incrementFeet = 1;
+  //incrementInches = 0;
+  totalLengthFeet = 1;
+  //totalLengthInches = 0;
   surveyStarted = false;
   currentMenu = 0;
   
@@ -218,8 +218,6 @@ void setup()
 */
 void loop()
 { 
-  displayMenu();
-  
   if(surveyStarted)
   {
     if(testCounter < 3)
@@ -230,10 +228,14 @@ void loop()
       getDist();
       Serial.println("loop - Increment traversed!");
       delay(2000);
+      testCounter++;
+    } else {
+      surveyStarted = false;
     }
+  } else {
+    displayMenu();
   }
-  
-testCounter++;
+
 Serial.print("Test counter: ");
 Serial.println(testCounter);
   //changeDirection();
@@ -250,6 +252,9 @@ Serial.println(testCounter);
 
 void displayMenu()
 { 
+  
+  volatile byte button = BUTTON_NONE;
+              
   switch(currentMenu)
   {
     // Print welcome, move to runway length
@@ -275,9 +280,7 @@ void displayMenu()
       lcd.setCursor(0,1);
       lcd.print(totalLengthFeet);
       lcd.print(" ft ");
-      lcd.print(totalLengthInches);
-      lcd.print(" inches");
-      lcd.setCursor(0,1); lcd.cursor();//lcd.blink();
+      lcd.setCursor(0,1);
       setLength();
       currentMenu = 2;
       delay(1000);
@@ -290,28 +293,45 @@ void displayMenu()
             lcd.setCursor(0,1);
             lcd.print(incrementFeet);
             lcd.print(" ft");
-            lcd.print(incrementInches);
-            lcd.print(" in.");
+            setResolution();
             currentMenu = 3;
-            delay(150);
+            delay(1000);
             break;
     // Wait for user to start survey
     case 3: lcd.clear();
             lcd.print("Start Survey");
             lcd.setCursor(0,1);
             lcd.print("Press Select");
+            
+            while (button != BUTTON_SELECT) {
+               button = ReadButtons();
+               delay(100);
+            }            
+            
+            surveyStarted = true;
+            
+            lcd.clear();
+            lcd.print("Survey Started...");
+            
             currentMenu = 4;
+            delay(2000);
             break;
     // Survey complete
-    case 4: lcd.clear();
-      lcd.print("Survey Complete! - SD card may now be saftely removed");
-     for (int positionCounter = 0; positionCounter < 13; positionCounter++)
+    case 4: 
+      lcd.setCursor(0,0);
+      lcd.print("Survey Complete!");
+      lcd.setCursor(0,1);
+      lcd.print("Remove SD Card");
+      break;
+     /*for (int positionCounter = 0; positionCounter < 13; positionCounter++)
       {
         // scroll one position left:
         lcd.scrollDisplayLeft();
       // wait a bit:
-      delay(150);
+      delay(300);
+     
       }
+      */
   }
 }
 
@@ -320,6 +340,7 @@ void setLength()
   byte button = BUTTON_NONE;
   while(button != BUTTON_SELECT)
   {
+    
    button = ReadButtons();
    switch(button)
    {
@@ -340,24 +361,24 @@ void setLength()
     }
   
     // totalLengthFeet loops around limits
-    if(totalLengthFeet < 0)
+    if(totalLengthFeet < 1)
     {
       totalLengthFeet = 300;
     }
     else if(totalLengthFeet > 300)
     {
-      totalLengthFeet = 0; 
+      totalLengthFeet = 1; 
     }
     
     // Update the display
-    if(totalLengthFeet < 10)
-    {
+  // if(totalLengthFeet < 10)
+   // {
+      lcd.setCursor(0,1);
+      lcd.print("            ");
       lcd.setCursor(0,1);
       lcd.print(totalLengthFeet);
       lcd.print(" ft ");
-      //lcd.print(totalLengthInches);
-      //lcd.print(" inches");
-      //lcd.setCursor(0,1); lcd.blink();
+      /*
     }
     else if (totalLengthFeet >=10 & totalLengthFeet <100)
     {
@@ -377,12 +398,62 @@ void setLength()
       //lcd.print(" inches");
       //lcd.setCursor(0,2); lcd.blink();
     }
+    */
+    delay(100);
   }
   
   
   // continue here
 }
 
+void setResolution()
+{
+  byte button = BUTTON_NONE;
+  while(button != BUTTON_SELECT)
+  {
+    
+   button = ReadButtons();
+   switch(button)
+   {
+     case BUTTON_UP:
+     {
+       incrementFeet++;
+       Serial.println(incrementFeet);
+       break;
+     }
+     case BUTTON_DOWN:
+     {
+       incrementFeet--; 
+        Serial.println(incrementFeet);
+       break;
+     }
+     case BUTTON_SELECT:
+       break;
+    }
+  
+    // totalLengthFeet loops around limits
+    if(incrementFeet < 1)
+    {
+      incrementFeet = 5;
+    }
+    else if(incrementFeet > 5)
+    {
+      incrementFeet = 1; 
+    }
+    
+    // Update the display
+  // if(totalLengthFeet < 10)
+   // {
+      lcd.setCursor(0,1);
+      lcd.print("            ");
+      lcd.setCursor(0,1);
+      lcd.print(incrementFeet);
+      lcd.print(" ft ");
+      
+    delay(100);
+  }
+  
+}
 
 void increment2count(int feet, int inches)
 {
@@ -732,11 +803,16 @@ void getDist(void){
 
   // Only if valid data
     if (rc == 21){
+      
+      // Stop taking measurements
+      stopMeasureing();
+          
       buf[rc] = '\0';
       temp = String(buf);
       dist_m = temp.substring(14,16);  
       dist_mm = temp.substring(16,19);
     
+   
       // Print formatting
       Serial.print("Distance: ");
       Serial.print(dist_m);
@@ -752,9 +828,8 @@ void getDist(void){
         myFile.print(dist_mm);
         myFile.println(" m. Position: ");
        }
-    // Stop taking measurements
-    stopMeasureing();
-     return;
+
+      return;
      }
    }  
   
