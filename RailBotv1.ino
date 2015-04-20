@@ -84,10 +84,10 @@
 // Other Deinitions
 #define SHORT_PRESS 400               // Button press short (ms)
 #define LONG_PRESS 1500               // Button press long (ms)
-#define MAX_SPEED 255                 // Motor max PWM (count)
-#define MOTOR_SPEED 255               // Normal motor speed (pwm)
+#define MAX_SPEED 220                 // Motor max PWM (count)
+#define MOTOR_SPEED 220               // Normal motor speed (pwm)
 #define MOTOR_ADJ_SPEED 200           // Ajusting motor speed (pwm)
-#define ENCODER_DIA_INCHES (PI*26/8)  // Diameter of encoder in inches (inches)
+#define ENCODER_DIA_INCHES (PI*1.625)  // Diameter of encoder in inches (inches)
 
 /*-----( Global Variables )-----*/
 // RF Control
@@ -100,11 +100,13 @@ File myFile;
 long count;                           // Current number of interrupts from encoder
 long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
+long totalCount;
 long countRemainder;                  // 
 long loopCount;                       // Number of times count increment met
 int  motorDirection;                   // Direction the robot is moving
 volatile boolean isMoving;            // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
+long currPosition = 1;                // Position of the robot currently (measurement number)
 // LCD Control
 int  currentMenu;                     // Menu to be displayed to user
 long incrementFeet;                   // Feet per increment
@@ -153,9 +155,9 @@ void setup()
    //digitalWrite( LCD_BACKLIGHT_PIN, HIGH );  //backlight control pin D3 is high (on)
    //pinMode( LCD_BACKLIGHT_PIN, OUTPUT );     //D3 is an output
    
-  lcd.print("CRANE TEAM");
+  lcd.print("READING CRANE");
   lcd.setCursor(0,1);
-  lcd.print("RAILBOT");
+  lcd.print("  RAIL-BOT");
   incrementFeet = 1;
   //incrementInches = 0;
   totalLengthFeet = 1;
@@ -172,6 +174,7 @@ void setup()
   // Motor control globals
   count = 0;
   loopCount = 0;
+  totalCount = 0;
   motorDirection = 1;
 
   // Motor pin modes
@@ -193,7 +196,11 @@ void setup()
   if ( SD.begin(SD_CS_P) )
   {
      Serial.println("SD card initialized successfully.\n");
-     myFile = SD.open("test.txt", FILE_WRITE);
+     myFile = SD.open("test.csv", FILE_WRITE);
+      if(myFile) {
+        myFile.println("N, Location (ft), Measurement (ft)");
+        myFile.close();
+      }
   }
 
   // RF Initialization
@@ -203,13 +210,6 @@ void setup()
   radio.begin();
   Serial.println("RF Module information:");
   radio.printDetails();
-
-  // Test info
-  testCounter = 0;
-  feet = 2;
-  inches = 6;
-  
-  increment2count(feet, inches);
   
 }//--( end setup )---
 
@@ -220,7 +220,7 @@ void loop()
 { 
   if(surveyStarted)
   {
-    if(testCounter < 3)
+    if(count < (totalCount-1))
     {
       Serial.println("loop - Moving Forward...");
       driveMotor();
@@ -228,16 +228,13 @@ void loop()
       getDist();
       Serial.println("loop - Increment traversed!");
       delay(2000);
-      testCounter++;
     } else {
       surveyStarted = false;
+      Serial.println("SURVEY DONE!");
     }
   } else {
     displayMenu();
   }
-
-Serial.print("Test counter: ");
-Serial.println(testCounter);
   //changeDirection();
   //driveMotor();
   //resetMotor();
@@ -266,7 +263,7 @@ void displayMenu()
         // scroll one position left:
         lcd.scrollDisplayLeft();
         // wait a bit:
-        delay(150);
+        delay(300);
       }
       currentMenu = 1;
       break;
@@ -282,6 +279,9 @@ void displayMenu()
       lcd.print(" ft ");
       lcd.setCursor(0,1);
       setLength();
+      totalCount = feet2count(totalLengthFeet);
+      Serial.print("Total counts = ");
+      Serial.println(totalCount);
       currentMenu = 2;
       delay(1000);
       break;
@@ -294,6 +294,9 @@ void displayMenu()
             lcd.print(incrementFeet);
             lcd.print(" ft");
             setResolution();
+            countIncrement = feet2count(incrementFeet);
+            Serial.print("Count Increment = ");
+            Serial.println(countIncrement);
             currentMenu = 3;
             delay(1000);
             break;
@@ -347,13 +350,13 @@ void setLength()
      case BUTTON_UP:
      {
        totalLengthFeet++;
-       Serial.println(totalLengthFeet);
+       //Serial.println(totalLengthFeet);
        break;
      }
      case BUTTON_DOWN:
      {
        totalLengthFeet--; 
-        Serial.println(totalLengthFeet);
+        //Serial.println(totalLengthFeet);
        break;
      }
      case BUTTON_SELECT:
@@ -418,13 +421,13 @@ void setResolution()
      case BUTTON_UP:
      {
        incrementFeet++;
-       Serial.println(incrementFeet);
+       //Serial.println(incrementFeet);
        break;
      }
      case BUTTON_DOWN:
      {
        incrementFeet--; 
-        Serial.println(incrementFeet);
+       // Serial.println(incrementFeet);
        break;
      }
      case BUTTON_SELECT:
@@ -455,16 +458,17 @@ void setResolution()
   
 }
 
-void increment2count(int feet, int inches)
+long feet2count(long feet)  //75.257 37.6286
 {
    float count_estimation;
-   count_estimation = (feet*12 + inches) * (ENCODER_DIA_INCHES)/16;
-   countIncrement = floor(count_estimation);
-   Serial.print("Total inches = ");
-   Serial.print(count_estimation);
-   Serial.print("Total counts = ");
-   Serial.println(countIncrement);
-   countRemainder = count_estimation - (int)count_estimation;
+   count_estimation = (feet*12) * (16/(ENCODER_DIA_INCHES));
+   //count = floor(count_estimation);
+   //Serial.print("Total inches = ");
+   //Serial.print(count_estimation);
+   //Serial.print("Total counts = ");
+   //Serial.println(countIncrement);
+   //countRemainder = count_estimation - (int)count_estimation;
+   return floor(count_estimation); 
 }
 
 
@@ -779,7 +783,6 @@ void getDist(void){
 
   delay(50);
   
-  //startMeasureing();
   while(true)
   {
   //do
@@ -820,15 +823,19 @@ void getDist(void){
       Serial.print(dist_mm);
       Serial.println(" m");
    
+      myFile = SD.open("test.csv", FILE_WRITE);
       if(myFile) {
         Serial.println("Writing to card");
-        myFile.print("Distance: ");
+        myFile.print(currPosition);
+        myFile.print(", ");
+        myFile.print(incrementFeet*currPosition);
+        myFile.print(", ");
         myFile.print(dist_m);
         myFile.print('.');
-        myFile.print(dist_mm);
-        myFile.println(" m. Position: ");
-       }
-
+        myFile.println(dist_mm);
+        myFile.close();
+      }
+      currPosition++;
       return;
      }
    }  
