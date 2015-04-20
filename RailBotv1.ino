@@ -63,6 +63,24 @@
 #define MOTOR_B_P 45         // PWM B (out) => pin53
 #define MOTOR_EN_P 13        // Motor enable => pin13
 
+// LCD Components
+#define BUTTON_ADC_P           A0  // A0 is the button ADC input
+//#define LCD_BACKLIGHT_P         10  // D10 controls LCD backlight
+//return values for ReadButtons()
+#define BUTTON_NONE               0  // 
+#define BUTTON_RIGHT              1  // 
+#define BUTTON_UP                 2  // 
+#define BUTTON_DOWN               3  // 
+#define BUTTON_LEFT               4  // 
+#define BUTTON_SELECT             5  // 
+// ADC readings expected for the 5 buttons on the ADC input
+#define RIGHT_10BIT_ADC           0  // right
+#define UP_10BIT_ADC            145  // up
+#define DOWN_10BIT_ADC          329  // down
+#define LEFT_10BIT_ADC          505  // left
+#define SELECT_10BIT_ADC        741  // right
+#define BUTTONHYSTERESIS         10  // hysteresis for valid button sensing window
+
 // Other Deinitions
 #define SHORT_PRESS 400               // Button press short (ms)
 #define LONG_PRESS 1500               // Button press long (ms)
@@ -83,30 +101,38 @@ long count;                           // Current number of interrupts from encod
 long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
 long countRemainder;                  // 
-long incrementFeet;                   // Feet per increment
-long totalDistance;                   // Total feet of survey
 long loopCount;                       // Number of times count increment met
 int  motorDirection;                   // Direction the robot is moving
-int  currentMenu;                     // Menu to be displayed to user
 volatile boolean isMoving;            // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
+// LCD Control
+int  currentMenu;                     // Menu to be displayed to user
+long incrementFeet;                   // Feet per increment
+long incrementInches;                 // & inches
+long totalLengthFeet;               // Total feet of survey
+long totalLengthInches;             // & inches
+
+// Button Control
+byte buttonJustPressed  = false;         //this will be true after a ReadButtons() call if triggered
+byte buttonJustReleased = false;         //this will be true after a ReadButtons() call if triggered
+byte buttonWas          = BUTTON_NONE;   //used by ReadButtons() for detection of button events
+boolean surveyStarted = false;           // Survey Initialization
+
 // Laser Control
 boolean isMeasureing;
-
-// Survey Initialization
-boolean surveyStarted;
 
 // Debug/Testing
 int testCounter;                                      
 int feet;
 int inches;
-float percision;
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 
 /*-----( Instantiate LCD )-----*/
 LiquidCrystal lcd(8,9,4,5,6,7);
+//LCD_UI lcd_();
+
 
 /*-----( ADRDUINO FUNCTIONS )-----*/
 /*
@@ -120,19 +146,20 @@ void setup()
   
   // LCD initialization
   lcd.begin(16,2);
-  /* **** Requires backlight wire to be interfaced
-  //button adc input
-  pinMode( BUTTON_ADC_PIN, INPUT );         //ensure A0 is an input
-  digitalWrite( BUTTON_ADC_PIN, LOW );      //ensure pullup is off on A0
-  //lcd backlight control
-  digitalWrite( LCD_BACKLIGHT_PIN, HIGH );  //backlight control pin D3 is high (on)
-  pinMode( LCD_BACKLIGHT_PIN, OUTPUT );     //D3 is an output
-  */
+   //button adc input
+   pinMode( BUTTON_ADC_P, INPUT );         //ensure A0 is an input
+   digitalWrite( BUTTON_ADC_P, LOW );      //ensure pullup is off on A0
+   //lcd backlight control
+   //digitalWrite( LCD_BACKLIGHT_PIN, HIGH );  //backlight control pin D3 is high (on)
+   //pinMode( LCD_BACKLIGHT_PIN, OUTPUT );     //D3 is an output
+   
   lcd.print("CRANE TEAM");
   lcd.setCursor(0,1);
   lcd.print("RAILBOT");
   incrementFeet = 0;
-  totalDistance = 0;
+  incrementInches = 0;
+  totalLengthFeet = 0;
+  totalLengthInches = 0;
   surveyStarted = false;
   currentMenu = 0;
   
@@ -181,9 +208,8 @@ void setup()
   testCounter = 0;
   feet = 2;
   inches = 6;
-  percision = 0;
   
-  increment2count(feet, inches, percision);
+  increment2count(feet, inches);
   
 }//--( end setup )---
 
@@ -193,10 +219,6 @@ void setup()
 void loop()
 { 
   displayMenu();
-  delay(4000);
-  
-  currentMenu++;
-  
   
   if(surveyStarted)
   {
@@ -205,7 +227,7 @@ void loop()
       Serial.println("loop - Moving Forward...");
       driveMotor();
       resetMotor();
-      takeMeasurement();
+      getDist();
       Serial.println("loop - Increment traversed!");
       delay(2000);
     }
@@ -225,48 +247,214 @@ Serial.println(testCounter);
 
 /*-----( USER FUNCTIONS )-----*/
 
+
 void displayMenu()
 { 
   switch(currentMenu)
   {
+    // Print welcome, move to runway length
     case 0: lcd.clear();
-            lcd.print("Welcome");
-            break;
+      lcd.setCursor(15,0);
+      lcd.print("Welcome");
+      for (int positionCounter = 0; positionCounter < 22; positionCounter++)
+      {
+        // scroll one position left:
+        lcd.scrollDisplayLeft();
+        // wait a bit:
+        delay(150);
+      }
+      currentMenu = 1;
+      break;
+      
+    // Display runway length while accepting input
+    //  move to resolution
     case 1: lcd.clear();
-            lcd.print("Runway Length: ");
-            lcd.setCursor(0,1);
-            lcd.print(totalDistance);
-            lcd.print(" ft");
-            break;
+      // Print the screen
+      lcd.setCursor(0,0);
+      lcd.print("Runway Length: ");
+      lcd.setCursor(0,1);
+      lcd.print(totalLengthFeet);
+      lcd.print(" ft ");
+      lcd.print(totalLengthInches);
+      lcd.print(" inches");
+      lcd.setCursor(0,1); lcd.cursor();//lcd.blink();
+      setLength();
+      currentMenu = 2;
+      delay(1000);
+      break;
+      
+    // Display resolution while accepting input
+    //  move to start survey
     case 2: lcd.clear();
             lcd.print("Resolution: ");
             lcd.setCursor(0,1);
             lcd.print(incrementFeet);
             lcd.print(" ft");
+            lcd.print(incrementInches);
+            lcd.print(" in.");
+            currentMenu = 3;
+            delay(150);
             break;
+    // Wait for user to start survey
     case 3: lcd.clear();
             lcd.print("Start Survey");
             lcd.setCursor(0,1);
             lcd.print("Press Select");
+            currentMenu = 4;
             break;
+    // Survey complete
+    case 4: lcd.clear();
+      lcd.print("Survey Complete! - SD card may now be saftely removed");
+     for (int positionCounter = 0; positionCounter < 13; positionCounter++)
+      {
+        // scroll one position left:
+        lcd.scrollDisplayLeft();
+      // wait a bit:
+      delay(150);
+      }
   }
 }
 
-
-int menuSelection(){
+void setLength()
+{
+  byte button = BUTTON_NONE;
+  while(button != BUTTON_SELECT)
+  {
+   button = ReadButtons();
+   switch(button)
+   {
+     case BUTTON_UP:
+     {
+       totalLengthFeet++;
+       Serial.println(totalLengthFeet);
+       break;
+     }
+     case BUTTON_DOWN:
+     {
+       totalLengthFeet--; 
+        Serial.println(totalLengthFeet);
+       break;
+     }
+     case BUTTON_SELECT:
+       break;
+    }
   
+    // totalLengthFeet loops around limits
+    if(totalLengthFeet < 0)
+    {
+      totalLengthFeet = 300;
+    }
+    else if(totalLengthFeet > 300)
+    {
+      totalLengthFeet = 0; 
+    }
+    
+    // Update the display
+    if(totalLengthFeet < 10)
+    {
+      lcd.setCursor(0,1);
+      lcd.print(totalLengthFeet);
+      lcd.print(" ft ");
+      //lcd.print(totalLengthInches);
+      //lcd.print(" inches");
+      //lcd.setCursor(0,1); lcd.blink();
+    }
+    else if (totalLengthFeet >=10 & totalLengthFeet <100)
+    {
+      lcd.setCursor(1,1);
+      lcd.print(totalLengthFeet);
+      lcd.print(" ft ");
+      //lcd.print(totalLengthInches);
+      //lcd.print(" inches");
+      //lcd.setCursor(1,1); lcd.blink();      
+    }
+    else if (totalLengthFeet >= 100)
+    {
+      lcd.setCursor(2,1);
+      lcd.print(totalLengthFeet);
+      lcd.print(" ft ");
+      //lcd.print(totalLengthInches);
+      //lcd.print(" inches");
+      //lcd.setCursor(0,2); lcd.blink();
+    }
+  }
+  
+  
+  // continue here
 }
 
-void increment2count(int feet, int inches, float percision)
+
+void increment2count(int feet, int inches)
 {
    float count_estimation;
-   count_estimation = (feet*12 + inches + percision) * (ENCODER_DIA_INCHES)/16;
+   count_estimation = (feet*12 + inches) * (ENCODER_DIA_INCHES)/16;
    countIncrement = floor(count_estimation);
    Serial.print("Total inches = ");
    Serial.print(count_estimation);
    Serial.print("Total counts = ");
    Serial.println(countIncrement);
    countRemainder = count_estimation - (int)count_estimation;
+}
+
+
+
+/*--------------------------------------------------------------------------------------
+  ReadButtons()
+  Detect the button pressed and return the value
+  Uses global values buttonWas, buttonJustPressed, buttonJustReleased.
+--------------------------------------------------------------------------------------*/
+byte ReadButtons()
+{
+   unsigned int buttonVoltage;
+   byte button = BUTTON_NONE;   // return no button pressed if the below checks don't write to btn
+ 
+   //read the button ADC pin voltage
+   buttonVoltage = analogRead( BUTTON_ADC_P );
+   //sense if the voltage falls within valid voltage windows
+   if( buttonVoltage < ( RIGHT_10BIT_ADC + BUTTONHYSTERESIS ) )
+   {
+      button = BUTTON_RIGHT;
+   }
+   else if(   buttonVoltage >= ( UP_10BIT_ADC - BUTTONHYSTERESIS )
+           && buttonVoltage <= ( UP_10BIT_ADC + BUTTONHYSTERESIS ) )
+   {
+      button = BUTTON_UP;
+   }
+   else if(   buttonVoltage >= ( DOWN_10BIT_ADC - BUTTONHYSTERESIS )
+           && buttonVoltage <= ( DOWN_10BIT_ADC + BUTTONHYSTERESIS ) )
+   {
+      button = BUTTON_DOWN;
+   }
+   else if(   buttonVoltage >= ( LEFT_10BIT_ADC - BUTTONHYSTERESIS )
+           && buttonVoltage <= ( LEFT_10BIT_ADC + BUTTONHYSTERESIS ) )
+   {
+      button = BUTTON_LEFT;
+   }
+   else if(   buttonVoltage >= ( SELECT_10BIT_ADC - BUTTONHYSTERESIS )
+           && buttonVoltage <= ( SELECT_10BIT_ADC + BUTTONHYSTERESIS ) )
+   {
+      button = BUTTON_SELECT;
+   }
+   
+   
+   //handle button flags for just pressed and just released events
+   if( ( buttonWas == BUTTON_NONE ) && ( button != BUTTON_NONE ) )
+   {
+      //the button was just pressed, set buttonJustPressed, this can optionally be used to trigger a once-off action for a button press event
+      //it's the duty of the receiver to clear these flags if it wants to detect a new button change event
+      buttonJustPressed  = true;
+      buttonJustReleased = false;
+   }
+   if( ( buttonWas != BUTTON_NONE ) && ( button == BUTTON_NONE ) )
+   {
+      buttonJustPressed  = false;
+      buttonJustReleased = true;
+   }
+ 
+   //save the latest button value, for change event detection next time round
+   buttonWas = button;
+ 
+   return( button );
 }
 
 /*
@@ -506,7 +694,7 @@ void stopMeasureing()
 /*
   Get Distance: Retreives distance from Rx, stores to SD card
 */
-void GetDist(void){
+void getDist(void){
   String dist_m;
   String dist_mm;
   String temp;
@@ -575,18 +763,3 @@ void GetDist(void){
   return;
 }
 
-/*
-  Test Measurement: Starts and stops continuous measurements
-*/
-void takeMeasurement()
-{
-    // Start continuous measurements  
-    //startMeasureing();
-
-    //delay(50);
-
-    // Sample the distance a few times, play with i and delays
-    GetDist();
-    
- return;
-}
