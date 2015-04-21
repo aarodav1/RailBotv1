@@ -64,7 +64,7 @@
 #define MOTOR_EN_P 13        // Motor enable => pin13
 
 // LCD Components
-#define BUTTON_ADC_P           A0  // A0 is the button ADC input
+#define BUTTON_ADC_P           A8  // A0 is the button ADC input
 //#define LCD_BACKLIGHT_P         10  // D10 controls LCD backlight
 //return values for ReadButtons()
 #define BUTTON_NONE               0  // 
@@ -78,7 +78,7 @@
 #define UP_10BIT_ADC            145  // up
 #define DOWN_10BIT_ADC          329  // down
 #define LEFT_10BIT_ADC          505  // left
-#define SELECT_10BIT_ADC        741  // right
+#define SELECT_10BIT_ADC        760  // right
 #define BUTTONHYSTERESIS         10  // hysteresis for valid button sensing window
 
 // Other Deinitions
@@ -132,7 +132,7 @@ int inches;
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 
 /*-----( Instantiate LCD )-----*/
-LiquidCrystal lcd(8,9,4,5,6,7);
+LiquidCrystal lcd(38,39,34,35,36,37);
 //LCD_UI lcd_();
 
 
@@ -201,6 +201,10 @@ void setup()
         myFile.println("N, Location (ft), Measurement (ft)");
         myFile.close();
       }
+  } else {
+    lcd.clear();
+    lcd.print("SD ERROR");
+    delay(2000);
   }
 
   // RF Initialization
@@ -211,6 +215,8 @@ void setup()
   Serial.println("RF Module information:");
   radio.printDetails();
   
+  loopCount = 0;
+  
 }//--( end setup )---
 
 /*
@@ -218,15 +224,19 @@ void setup()
 */
 void loop()
 { 
+  int loopEnd = totalCount / countIncrement;
+  
   if(surveyStarted)
   {
-    if(count < (totalCount-1))
+    if(loopCount < loopEnd)
     {
       Serial.println("loop - Moving Forward...");
       driveMotor();
       resetMotor();
       getDist();
       Serial.println("loop - Increment traversed!");
+      loopCount++;
+      
       delay(2000);
     } else {
       surveyStarted = false;
@@ -544,6 +554,7 @@ byte ReadButtons()
 */
 void driveMotor ()
 { 
+  sei();
   // Declare/Initialize adjustment parameters
   int temp_speed = MOTOR_SPEED;
   int temp_direction = motorDirection;
@@ -686,8 +697,8 @@ void countInt(){
     count--;
   }
   
-  Serial.print("CountInt - Count changed: Count = ");
-  Serial.println(count);  
+  //Serial.print("CountInt - Count changed: Count = ");
+  //Serial.println(count);  
   
   // Service routine to stop the robot
   if ( count == (currentCount + countIncrement) )
