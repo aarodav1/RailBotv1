@@ -64,13 +64,8 @@
 #define MOTOR_EN_P                 13 // Motor enable => pin13
 
 // LCD Components
-<<<<<<< HEAD
 #define BUTTON_ADC_P           A8  // A0 is the button ADC input
 //#define LCD_BACKLIGHT_P         10  // D10 controls LCD backlight
-=======
-#define BUTTON_ADC_P               A8 // A0 is the button ADC input
-//#define LCD_BACKLIGHT_P           10 // D10 controls LCD backlight
->>>>>>> origin/master
 //return values for ReadButtons()
 #define BUTTON_NONE                 0 // 
 #define BUTTON_RIGHT                1 // 
@@ -79,21 +74,12 @@
 #define BUTTON_LEFT                 4 // 
 #define BUTTON_SELECT               5 // 
 // ADC readings expected for the 5 buttons on the ADC input
-<<<<<<< HEAD
-#define RIGHT_10BIT_ADC           0  // right
-#define UP_10BIT_ADC            145  // up
-#define DOWN_10BIT_ADC          329  // down
-#define LEFT_10BIT_ADC          505  // left
-#define SELECT_10BIT_ADC        760  // right
-#define BUTTONHYSTERESIS         10  // hysteresis for valid button sensing window
-=======
 #define RIGHT_10BIT_ADC             0 // right   
 #define UP_10BIT_ADC              145 // up
 #define DOWN_10BIT_ADC            329 // down
 #define LEFT_10BIT_ADC            505 // left
 #define SELECT_10BIT_ADC          760 // right
 #define BUTTONHYSTERESIS           10 // hysteresis for valid button sensing window
->>>>>>> origin/master
 
 // Other Deinitions
 #define SHORT_PRESS               400 // Button press short (ms)
@@ -148,10 +134,6 @@ RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 
 /*-----( Instantiate LCD )-----*/
 LiquidCrystal lcd(38,39,34,35,36,37);
-<<<<<<< HEAD
-//LCD_UI lcd_();
-=======
->>>>>>> origin/master
 
 
 /*-----( ADRDUINO FUNCTIONS )-----*/
