@@ -547,7 +547,6 @@ byte ReadButtons()
 */
 void driveMotor ()
 { 
-  sei();
   // Declare/Initialize adjustment parameters
   int temp_speed = MOTOR_SPEED;
   int temp_direction = motorDirection;
