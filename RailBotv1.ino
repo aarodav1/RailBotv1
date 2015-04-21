@@ -41,6 +41,7 @@
    Questions: terry@yourduino.com
 */
 
+
 /*-----( Needed libraries )-----*/
 #include <SPI.h>           // SPI bus Library
 #include <SD.h>            // SD Library
@@ -51,43 +52,43 @@
 
 /*-----( Pin Definitions )-----*/
 // Digital Components
-#define SD_CS_P 41           // SD Chip Select (out) => pin49
-#define RF_CS_P 48           // RF Chip Select (out) => pin48
-#define RF_CSN_P 47          // RF_ (out) => pin47
-
-#define LASER_ON_P 43        // Laser on (out) => pin51
-#define LASER_OFF_P 44       // Laser off (out) => pin50
+#define SD_CS_P                    41 // SD Chip Select (out) => pin49
+#define RF_CS_P                    48 // RF Chip Select (out) => pin48
+#define RF_CSN_P                   47 // RF_ (out) => pin47
+#define LASER_ON_P                 43 // Laser on (out) => pin51
+#define LASER_OFF_P                44 // Laser off (out) => pin50
 
 // Analong Components
-#define MOTOR_A_P 46         // PWM A (out) => pin52
-#define MOTOR_B_P 45         // PWM B (out) => pin53
-#define MOTOR_EN_P 13        // Motor enable => pin13
+#define MOTOR_A_P                  46 // PWM A (out) => pin52
+#define MOTOR_B_P                  45 // PWM B (out) => pin53
+#define MOTOR_EN_P                 13 // Motor enable => pin13
 
 // LCD Components
-#define BUTTON_ADC_P           A0  // A0 is the button ADC input
-//#define LCD_BACKLIGHT_P         10  // D10 controls LCD backlight
+#define BUTTON_ADC_P               A8 // A0 is the button ADC input
+//#define LCD_BACKLIGHT_P           10 // D10 controls LCD backlight
 //return values for ReadButtons()
-#define BUTTON_NONE               0  // 
-#define BUTTON_RIGHT              1  // 
-#define BUTTON_UP                 2  // 
-#define BUTTON_DOWN               3  // 
-#define BUTTON_LEFT               4  // 
-#define BUTTON_SELECT             5  // 
+#define BUTTON_NONE                 0 // 
+#define BUTTON_RIGHT                1 // 
+#define BUTTON_UP                   2 // 
+#define BUTTON_DOWN                 3 // 
+#define BUTTON_LEFT                 4 // 
+#define BUTTON_SELECT               5 // 
 // ADC readings expected for the 5 buttons on the ADC input
-#define RIGHT_10BIT_ADC           0  // right
-#define UP_10BIT_ADC            145  // up
-#define DOWN_10BIT_ADC          329  // down
-#define LEFT_10BIT_ADC          505  // left
-#define SELECT_10BIT_ADC        741  // right
-#define BUTTONHYSTERESIS         10  // hysteresis for valid button sensing window
+#define RIGHT_10BIT_ADC             0 // right   
+#define UP_10BIT_ADC              145 // up
+#define DOWN_10BIT_ADC            329 // down
+#define LEFT_10BIT_ADC            505 // left
+#define SELECT_10BIT_ADC          760 // right
+#define BUTTONHYSTERESIS           10 // hysteresis for valid button sensing window
 
 // Other Deinitions
-#define SHORT_PRESS 400               // Button press short (ms)
-#define LONG_PRESS 1500               // Button press long (ms)
-#define MAX_SPEED 220                 // Motor max PWM (count)
-#define MOTOR_SPEED 220               // Normal motor speed (pwm)
-#define MOTOR_ADJ_SPEED 200           // Ajusting motor speed (pwm)
-#define ENCODER_DIA_INCHES (PI*1.625)  // Diameter of encoder in inches (inches)
+#define SHORT_PRESS               400 // Button press short (ms)
+#define LONG_PRESS               1500 // Button press long (ms)
+#define MAX_SPEED                 220 // Motor max PWM (count)
+#define MOTOR_SPEED               220 // Normal motor speed (pwm)
+#define MOTOR_ADJ_SPEED           200 // Ajusting motor speed (pwm)
+#define ENCODER_DIA_INCHES (PI*1.625) // Diameter of encoder in inches (inches)
+
 
 /*-----( Global Variables )-----*/
 // RF Control
@@ -100,13 +101,13 @@ File myFile;
 long count;                           // Current number of interrupts from encoder
 long currentCount;                    // Position at beginning of call to move()
 long countIncrement;                  // Number of counts per user interval spec
+long currPosition = 1;                // Position of the robot currently (measurement number)
 long totalCount;
-long countRemainder;                  // 
 long loopCount;                       // Number of times count increment met
 int  motorDirection;                   // Direction the robot is moving
 volatile boolean isMoving;            // Whether or not robot is currently moving. Declared as volatile so
                                       // it doesn't get optimized out by compiler
-long currPosition = 1;                // Position of the robot currently (measurement number)
+
 // LCD Control
 int  currentMenu;                     // Menu to be displayed to user
 long incrementFeet;                   // Feet per increment
@@ -132,8 +133,7 @@ int inches;
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
 
 /*-----( Instantiate LCD )-----*/
-LiquidCrystal lcd(8,9,4,5,6,7);
-//LCD_UI lcd_();
+LiquidCrystal lcd(38,39,34,35,36,37);
 
 
 /*-----( ADRDUINO FUNCTIONS )-----*/
@@ -148,27 +148,22 @@ void setup()
   
   // LCD initialization
   lcd.begin(16,2);
-   //button adc input
-   pinMode( BUTTON_ADC_P, INPUT );         //ensure A0 is an input
-   digitalWrite( BUTTON_ADC_P, LOW );      //ensure pullup is off on A0
-   //lcd backlight control
-   //digitalWrite( LCD_BACKLIGHT_PIN, HIGH );  //backlight control pin D3 is high (on)
-   //pinMode( LCD_BACKLIGHT_PIN, OUTPUT );     //D3 is an output
+  pinMode( BUTTON_ADC_P, INPUT );         //ensure A0 is an input
+  digitalWrite( BUTTON_ADC_P, LOW );      //ensure pullup is off on A0
    
+  // Setup LCD parameter
   lcd.print("READING CRANE");
   lcd.setCursor(0,1);
   lcd.print("  RAIL-BOT");
-  incrementFeet = 1;
-  //incrementInches = 0;
+  Serial.println("Printed Reading Crane Rail-bot");
+  incrementFeet   = 1;
   totalLengthFeet = 1;
-  //totalLengthInches = 0;
   surveyStarted = false;
   currentMenu = 0;
   
   // Laser pins
   pinMode( LASER_ON_P, OUTPUT );      
   pinMode( LASER_OFF_P, OUTPUT ); 
-  laserOff();
   laserOn();
  
   // Motor control globals
@@ -235,23 +230,19 @@ void loop()
   } else {
     displayMenu();
   }
-  //changeDirection();
-  //driveMotor();
-  //resetMotor();
-  //delay(2000);
-  //changeDirection();
-  
 }//--( end main loop )---
 
 
 /*-----( USER FUNCTIONS )-----*/
 
-
+/*
+  Display Menu - 
+*/
 void displayMenu()
 { 
-  
   volatile byte button = BUTTON_NONE;
-              
+  
+  // Nagigate menu based on current state
   switch(currentMenu)
   {
     // Print welcome, move to runway length
@@ -345,6 +336,7 @@ void setLength()
   {
     
    button = ReadButtons();
+   
    switch(button)
    {
      case BUTTON_UP:
@@ -485,6 +477,7 @@ byte ReadButtons()
  
    //read the button ADC pin voltage
    buttonVoltage = analogRead( BUTTON_ADC_P );
+   
    //sense if the voltage falls within valid voltage windows
    if( buttonVoltage < ( RIGHT_10BIT_ADC + BUTTONHYSTERESIS ) )
    {
