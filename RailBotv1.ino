@@ -78,7 +78,7 @@
 #define UP_10BIT_ADC              145 // up
 #define DOWN_10BIT_ADC            329 // down
 #define LEFT_10BIT_ADC            505 // left
-#define SELECT_10BIT_ADC          760 // right
+#define SELECT_10BIT_ADC          740 // select
 #define BUTTONHYSTERESIS           10 // hysteresis for valid button sensing window
 
 // Other Deinitions
