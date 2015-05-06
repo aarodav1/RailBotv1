@@ -234,6 +234,7 @@ void loop()
       
       delay(2000);
     } else {
+      returnToStart();
       surveyStarted = false;
       Serial.println("SURVEY DONE!");
     }
@@ -256,18 +257,11 @@ void displayMenu()
   switch(currentMenu)
   {
     // Print welcome, move to runway length
-    case 0: lcd.clear();
-      lcd.setCursor(15,0);
-      lcd.print("Welcome");
-      for (int positionCounter = 0; positionCounter < 22; positionCounter++)
-      {
-        // scroll one position left:
-        lcd.scrollDisplayLeft();
-        // wait a bit:
-        delay(300);
-      }
-      currentMenu = 1;
-      break;
+    case 0: 
+            delay(1500);
+            lcd.clear();
+            currentMenu = 1;
+            break;
       
     // Display runway length while accepting input
     //  move to resolution
@@ -671,6 +665,25 @@ void resetMotor() {
   
 }
 
+void returnToStart() {
+  
+  if (motorDirection == 1) {
+    changeDirection();
+  }
+  
+  currentCount = count;
+  countIncrement = -(totalCount - 10);
+
+  analogWrite( MOTOR_EN_P, MOTOR_SPEED );
+  
+  isMoving = true;
+  
+  while(isMoving);
+  
+  return;
+  
+}
+
 //ISR for the rotary encoder
 //Increments the counter variable by 1 every time it is triggered on both the rising
 //and falling edge of the signal. This translates into 16 interrupts per rotation of the 
@@ -826,7 +839,9 @@ void getDist(void){
       Serial.print(dist_mm);
       Serial.println(" m");
    
-      myFile = SD.open("test.csv", FILE_WRITE);
+     //NEED TO ACTUALLY CONVERT METERS TO FEET FOR CSV FILE
+
+     myFile = SD.open("test.csv", FILE_WRITE);
       if(myFile) {
         Serial.println("Writing to card");
         myFile.print(currPosition);
