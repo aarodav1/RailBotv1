@@ -91,8 +91,6 @@
 
 
 /*-----( Global Variables )-----*/
-// RF Control
-const uint64_t pipe = 0xF0F0F0F0D2LL; // Define the transmit pipe **LL IS LONGLONG**
 
 // SD Control
 File myFile;
@@ -131,6 +129,8 @@ int inches;
 
 /*-----( Instantiate Radio )-----*/
 RF24 radio(RF_CS_P,RF_CSN_P); // Create a Radio
+const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
+long transmitSuccess = 1;
 
 /*-----( Instantiate LCD )-----*/
 LiquidCrystal lcd(38,39,34,35,36,37);
@@ -210,6 +210,10 @@ void setup()
   Serial.println("RF Module information:");
   radio.printDetails();
   
+  radio.setRetries(15,15);
+  radio.openReadingPipe(1,pipes[0]);
+  radio.openWritingPipe(pipes[1]);
+  
   loopCount = 0;
   
 }//--( end setup )---
@@ -246,7 +250,30 @@ void loop()
 
 /*-----( USER FUNCTIONS )-----*/
 
-/*
+
+void sendParameters() {
+  
+  Serial.println("Sending parameters...");
+  radio.stopListening();
+
+  long code0 = 0;
+  long code1 = 1;
+  
+  while(!radio.write(&code0, sizeof(long)));
+
+  while(!radio.write(&totalCount, sizeof(long)));
+
+  while(!radio.write(&code1, sizeof(long)));
+    
+  while(!radio.write(&countIncrement, sizeof(long)));
+  
+  radio.startListening();
+ 
+  return;
+  
+}
+    
+  /*
   Display Menu - 
 */
 void displayMenu()
@@ -305,6 +332,8 @@ void displayMenu()
                button = ReadButtons();
                delay(100);
             }            
+            
+            sendParameters();
             
             surveyStarted = true;
             
